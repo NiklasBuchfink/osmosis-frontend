@@ -1,9 +1,5 @@
 import { CoinPretty, Dec, DecUtils, PricePretty } from "@keplr-wallet/unit";
-import {
-  ObservableAddConcentratedLiquidityConfig,
-  ObservableQueryPool,
-  QuasarVault,
-} from "@osmosis-labs/stores";
+import { ObservableQueryPool, QuasarVault } from "@osmosis-labs/stores";
 import classNames from "classnames";
 import debounce from "debounce";
 import { observer } from "mobx-react-lite";
@@ -33,7 +29,7 @@ import { InputBox } from "~/components/input";
 import Spinner from "~/components/spinner";
 import { CustomClasses } from "~/components/types";
 import { EventName } from "~/config";
-import { useTranslation } from "~/hooks";
+import { AddConcentratedLiquidityState, useTranslation } from "~/hooks";
 import { useAmplitudeAnalytics } from "~/hooks";
 import { useHistoricalAndLiquidityData } from "~/hooks/ui-config/use-historical-and-depth-data";
 import { useStore } from "~/stores";
@@ -54,20 +50,13 @@ const TokenPairHistoricalChart = dynamic(
 
 export const AddConcLiquidity: FunctionComponent<
   {
-    addLiquidityConfig: ObservableAddConcentratedLiquidityConfig;
+    poolId: string;
+    addLiquidityConfig: AddConcentratedLiquidityState;
     actionButton: ReactNode;
-    getFiatValue?: (coin: CoinPretty) => PricePretty | undefined;
     onRequestClose: () => void;
   } & CustomClasses
 > = observer(
-  ({
-    className,
-    addLiquidityConfig,
-    actionButton,
-    getFiatValue,
-    onRequestClose,
-  }) => {
-    const { poolId } = addLiquidityConfig;
+  ({ className, poolId, addLiquidityConfig, actionButton, onRequestClose }) => {
     const {
       queriesStore,
       chainStore: {
@@ -95,6 +84,7 @@ export const AddConcLiquidity: FunctionComponent<
             case "overview":
               return (
                 <Overview
+                  poolId={poolId}
                   pool={pool}
                   quasarVaults={quasarVaults}
                   addLiquidityConfig={addLiquidityConfig}
@@ -104,7 +94,7 @@ export const AddConcLiquidity: FunctionComponent<
             case "add_manual":
               return (
                 <AddConcLiqView
-                  getFiatValue={getFiatValue}
+                  poolId={poolId}
                   pool={pool}
                   addLiquidityConfig={addLiquidityConfig}
                   actionButton={actionButton}
@@ -126,151 +116,153 @@ export const AddConcLiquidity: FunctionComponent<
 
 const Overview: FunctionComponent<
   {
+    poolId: string;
     pool?: ObservableQueryPool;
     quasarVaults: QuasarVault[];
-    addLiquidityConfig: ObservableAddConcentratedLiquidityConfig;
+    addLiquidityConfig: AddConcentratedLiquidityState;
     onRequestClose: () => void;
   } & CustomClasses
-> = observer(({ addLiquidityConfig, quasarVaults, pool, onRequestClose }) => {
-  const { priceStore, queriesExternalStore, derivedDataStore } = useStore();
-  const { t } = useTranslation();
-  const [selected, selectView] =
-    useState<typeof addLiquidityConfig.modalView>("add_manual");
-  const queryPoolFeeMetrics = queriesExternalStore.queryPoolFeeMetrics;
+> = observer(
+  ({ poolId, addLiquidityConfig, quasarVaults, pool, onRequestClose }) => {
+    const { priceStore, queriesExternalStore, derivedDataStore } = useStore();
+    const { t } = useTranslation();
+    const [selected, selectView] =
+      useState<typeof addLiquidityConfig.modalView>("add_manual");
+    const queryPoolFeeMetrics = queriesExternalStore.queryPoolFeeMetrics;
 
-  const superfluidPoolDetail = derivedDataStore.superfluidPoolDetails.get(
-    addLiquidityConfig.poolId
-  );
+    const superfluidPoolDetail =
+      derivedDataStore.superfluidPoolDetails.get(poolId);
 
-  const hasProvidersVaults = quasarVaults.length;
+    const hasProvidersVaults = quasarVaults.length;
 
-  return (
-    <>
-      <div className="align-center relative flex flex-row">
-        <div className="absolute left-0 flex h-full items-center text-sm" />
-        <h6 className="flex-1 text-center">
-          {t("addConcentratedLiquidity.step1Title")}
-        </h6>
-        <div className="absolute right-0">
-          <IconButton
-            aria-label="Close"
-            mode="unstyled"
-            size="unstyled"
-            className="!p-0"
-            icon={
-              <Icon
-                id="close"
-                className="text-osmoverse-400 hover:text-white-full"
-                width={32}
-                height={32}
-              />
-            }
-            onClick={onRequestClose}
-          />
-        </div>
-      </div>
-      <div className="flex rounded-[1rem] bg-osmoverse-700/[.3] px-[28px] py-4 md:flex-col md:items-center md:gap-2 xs:items-start">
-        <div className="flex flex-1 flex-col gap-1">
-          <div className="flex flex-nowrap items-center gap-2">
-            {pool && (
-              <>
-                <PoolAssetsIcon
-                  assets={pool.poolAssets.map(
-                    (asset: { amount: CoinPretty }) => ({
-                      coinDenom: asset.amount.denom,
-                      coinImageUrl: asset.amount.currency.coinImageUrl,
-                    })
-                  )}
-                  size="sm"
+    return (
+      <>
+        <div className="align-center relative flex flex-row">
+          <div className="absolute left-0 flex h-full items-center text-sm" />
+          <h6 className="flex-1 text-center">
+            {t("addConcentratedLiquidity.step1Title")}
+          </h6>
+          <div className="absolute right-0">
+            <IconButton
+              aria-label="Close"
+              mode="unstyled"
+              size="unstyled"
+              className="!p-0"
+              icon={
+                <Icon
+                  id="close"
+                  className="text-osmoverse-400 hover:text-white-full"
+                  width={32}
+                  height={32}
                 />
-                <PoolAssetsName
-                  size="md"
-                  className="max-w-xs truncate"
-                  assetDenoms={pool.poolAssets.map(
-                    (asset: { amount: CoinPretty }) => asset.amount.denom
-                  )}
-                />
-              </>
-            )}
-          </div>
-          {superfluidPoolDetail?.isSuperfluid && (
-            <span className="body2 text-superfluid-gradient">
-              {t("pool.superfluidEnabled")}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-10 xs:flex-wrap xs:gap-y-4 xs:gap-x-6">
-          <div className="gap-[3px]">
-            <span className="body2 text-osmoverse-400">
-              {t("pool.24hrTradingVolume")}
-            </span>
-            <h6 className="text-osmoverse-100">
-              {queryPoolFeeMetrics
-                .getPoolFeesMetrics(addLiquidityConfig.poolId, priceStore)
-                .volume24h.toString()}
-            </h6>
-          </div>
-          <div className="gap-[3px]">
-            <span className="body2 text-osmoverse-400">
-              {t("pool.liquidity")}
-            </span>
-            <h6 className="text-osmoverse-100">
-              {pool?.computeTotalValueLocked(priceStore).toString()}
-            </h6>
-          </div>
-          <div className="gap-[3px]">
-            <span className="body2 text-osmoverse-400">
-              {t("pool.spreadFactor")}
-            </span>
-            <h6 className="text-osmoverse-100">{pool?.swapFee.toString()}</h6>
-          </div>
-        </div>
-      </div>
-      <div className="flex flex-col">
-        <div className="flex justify-center gap-[12px] xs:flex-col">
-          <div>
-            {hasProvidersVaults ? (
-              <StrategySelector
-                title={t("addConcentratedLiquidity.managed")}
-                description={t("addConcentratedLiquidity.managedDescription")}
-                selected={selected === "add_managed"}
-                onClick={() => selectView("add_managed")}
-                imgSrc="/images/cl-pool-providers.png"
-                isNew
-              />
-            ) : (
-              <StrategySelector
-                title={t("addConcentratedLiquidity.managed")}
-                description={t("addConcentratedLiquidity.managedDescription")}
-                selected={selected === "add_managed"}
-                imgSrc="/images/cl-managed-pick-strategy.png"
-              />
-            )}
-          </div>
-          <div>
-            <StrategySelector
-              title={t("addConcentratedLiquidity.manual")}
-              description={t("addConcentratedLiquidity.manualDescription")}
-              selected={selected === "add_manual"}
-              onClick={() => selectView("add_manual")}
-              imgSrc="/images/cl-manual-pick-strategy.png"
+              }
+              onClick={onRequestClose}
             />
           </div>
         </div>
-      </div>
-      <div className="flex w-full items-center justify-center">
-        <Button
-          className="w-[25rem]"
-          onClick={() => {
-            addLiquidityConfig.setModalView(selected);
-          }}
-        >
-          {t("pools.createPool.buttonNext")}
-        </Button>
-      </div>
-    </>
-  );
-});
+        <div className="flex rounded-[1rem] bg-osmoverse-700/[.3] px-[28px] py-4 md:flex-col md:items-center md:gap-2 xs:items-start">
+          <div className="flex flex-1 flex-col gap-1">
+            <div className="flex flex-nowrap items-center gap-2">
+              {pool && (
+                <>
+                  <PoolAssetsIcon
+                    assets={pool.poolAssets.map(
+                      (asset: { amount: CoinPretty }) => ({
+                        coinDenom: asset.amount.denom,
+                        coinImageUrl: asset.amount.currency.coinImageUrl,
+                      })
+                    )}
+                    size="sm"
+                  />
+                  <PoolAssetsName
+                    size="md"
+                    className="max-w-xs truncate"
+                    assetDenoms={pool.poolAssets.map(
+                      (asset: { amount: CoinPretty }) => asset.amount.denom
+                    )}
+                  />
+                </>
+              )}
+            </div>
+            {superfluidPoolDetail?.isSuperfluid && (
+              <span className="body2 text-superfluid-gradient">
+                {t("pool.superfluidEnabled")}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-10 xs:flex-wrap xs:gap-y-4 xs:gap-x-6">
+            <div className="gap-[3px]">
+              <span className="body2 text-osmoverse-400">
+                {t("pool.24hrTradingVolume")}
+              </span>
+              <h6 className="text-osmoverse-100">
+                {queryPoolFeeMetrics
+                  .getPoolFeesMetrics(poolId, priceStore)
+                  .volume24h.toString()}
+              </h6>
+            </div>
+            <div className="gap-[3px]">
+              <span className="body2 text-osmoverse-400">
+                {t("pool.liquidity")}
+              </span>
+              <h6 className="text-osmoverse-100">
+                {pool?.computeTotalValueLocked(priceStore).toString()}
+              </h6>
+            </div>
+            <div className="gap-[3px]">
+              <span className="body2 text-osmoverse-400">
+                {t("pool.spreadFactor")}
+              </span>
+              <h6 className="text-osmoverse-100">{pool?.swapFee.toString()}</h6>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-col">
+          <div className="flex justify-center gap-[12px] xs:flex-col">
+            <div>
+              {hasProvidersVaults ? (
+                <StrategySelector
+                  title={t("addConcentratedLiquidity.managed")}
+                  description={t("addConcentratedLiquidity.managedDescription")}
+                  selected={selected === "add_managed"}
+                  onClick={() => selectView("add_managed")}
+                  imgSrc="/images/cl-pool-providers.png"
+                  isNew
+                />
+              ) : (
+                <StrategySelector
+                  title={t("addConcentratedLiquidity.managed")}
+                  description={t("addConcentratedLiquidity.managedDescription")}
+                  selected={selected === "add_managed"}
+                  imgSrc="/images/cl-managed-pick-strategy.png"
+                />
+              )}
+            </div>
+            <div>
+              <StrategySelector
+                title={t("addConcentratedLiquidity.manual")}
+                description={t("addConcentratedLiquidity.manualDescription")}
+                selected={selected === "add_manual"}
+                onClick={() => selectView("add_manual")}
+                imgSrc="/images/cl-manual-pick-strategy.png"
+              />
+            </div>
+          </div>
+        </div>
+        <div className="flex w-full items-center justify-center">
+          <Button
+            className="w-[25rem]"
+            onClick={() => {
+              addLiquidityConfig.setModalView(selected);
+            }}
+          >
+            {t("pools.createPool.buttonNext")}
+          </Button>
+        </div>
+      </>
+    );
+  }
+);
 
 const StrategySelector: FunctionComponent<{
   title: string;
@@ -326,14 +318,13 @@ const StrategySelector: FunctionComponent<{
 
 const AddConcLiqView: FunctionComponent<
   {
+    poolId: string;
     pool?: ObservableQueryPool;
-    addLiquidityConfig: ObservableAddConcentratedLiquidityConfig;
+    addLiquidityConfig: AddConcentratedLiquidityState;
     actionButton: ReactNode;
-    getFiatValue?: (coin: CoinPretty) => PricePretty | undefined;
   } & CustomClasses
-> = observer(({ addLiquidityConfig, actionButton, getFiatValue, pool }) => {
+> = observer(({ poolId, addLiquidityConfig, actionButton, pool }) => {
   const {
-    poolId,
     rangeWithCurrencyDecimals,
     fullRange,
     baseDepositAmountIn,
@@ -405,8 +396,8 @@ const AddConcLiqView: FunctionComponent<
         </h6>
         <span className="caption absolute right-0 flex h-full items-center text-osmoverse-200 md:hidden">
           {t("addConcentratedLiquidity.priceShownIn", {
-            base: baseDepositAmountIn.sendCurrency.coinDenom,
-            quote: quoteDepositAmountIn.sendCurrency.coinDenom,
+            base: baseDepositAmountIn.amount?.currency.coinDenom ?? "",
+            quote: quoteDepositAmountIn.amount?.currency.coinDenom ?? "",
           })}
         </span>
       </div>
@@ -580,7 +571,6 @@ const AddConcLiqView: FunctionComponent<
         </div>
         <div className="flex justify-center gap-3 md:flex-col">
           <DepositAmountGroup
-            getFiatValue={getFiatValue}
             currency={pool?.poolAssets[0]?.amount.currency}
             className="md:!px-4 md:!py-4"
             priceInputClass=" md:!w-full"
@@ -592,12 +582,11 @@ const AddConcLiqView: FunctionComponent<
               [baseDepositAmountIn, setAnchorAsset]
             )}
             onMax={setBaseDepositAmountMax}
-            currentValue={baseDepositAmountIn.amount}
+            currentValue={baseDepositAmountIn.inputAmount}
             outOfRange={quoteDepositOnly}
             percentage={depositPercentages[0]}
           />
           <DepositAmountGroup
-            getFiatValue={getFiatValue}
             currency={pool?.poolAssets[1]?.amount.currency}
             className="md:!px-4 md:!py-4"
             priceInputClass=" md:!w-full"
@@ -609,7 +598,7 @@ const AddConcLiqView: FunctionComponent<
               [quoteDepositAmountIn, setAnchorAsset]
             )}
             onMax={setQuoteDepositAmountMax}
-            currentValue={quoteDepositAmountIn.amount}
+            currentValue={quoteDepositAmountIn.inputAmount}
             outOfRange={baseDepositOnly}
             percentage={depositPercentages[1]}
           />
@@ -622,7 +611,7 @@ const AddConcLiqView: FunctionComponent<
 
 const AddConcLiqManaged: FunctionComponent<
   {
-    addLiquidityConfig: ObservableAddConcentratedLiquidityConfig;
+    addLiquidityConfig: AddConcentratedLiquidityState;
     quasarVaults: QuasarVault[];
   } & CustomClasses
 > = observer(({ quasarVaults, addLiquidityConfig }) => {
@@ -713,7 +702,7 @@ const AddConcLiqManaged: FunctionComponent<
 const ChartHeader: FunctionComponent<{
   chartConfig: ObservableHistoricalAndLiquidityData;
 
-  addLiquidityConfig: ObservableAddConcentratedLiquidityConfig;
+  addLiquidityConfig: AddConcentratedLiquidityState;
 }> = observer(({ addLiquidityConfig, chartConfig }) => {
   const { baseDepositAmountIn, quoteDepositAmountIn } = addLiquidityConfig;
   const { historicalRange, setHistoricalRange, hoverPrice, priceDecimal } =
@@ -723,8 +712,8 @@ const ChartHeader: FunctionComponent<{
     <PriceChartHeader
       historicalRange={historicalRange}
       setHistoricalRange={setHistoricalRange}
-      baseDenom={baseDepositAmountIn.sendCurrency.coinDenom}
-      quoteDenom={quoteDepositAmountIn.sendCurrency.coinDenom}
+      baseDenom={baseDepositAmountIn.amount?.currency.coinDenom ?? ""}
+      quoteDenom={quoteDepositAmountIn.amount?.currency.coinDenom ?? ""}
       hoverPrice={hoverPrice}
       decimal={priceDecimal}
     />
@@ -736,7 +725,7 @@ const ChartHeader: FunctionComponent<{
  */
 const Chart: FunctionComponent<{
   chartConfig: ObservableHistoricalAndLiquidityData;
-  addLiquidityConfig: ObservableAddConcentratedLiquidityConfig;
+  addLiquidityConfig: AddConcentratedLiquidityState;
 }> = observer(({ addLiquidityConfig, chartConfig }) => {
   const { fullRange, rangeWithCurrencyDecimals } = addLiquidityConfig;
   const { yRange, historicalChartData, lastChartData, setHoverPrice } =
@@ -761,7 +750,7 @@ const Chart: FunctionComponent<{
 
 const StrategySelectorGroup: FunctionComponent<
   {
-    addLiquidityConfig: ObservableAddConcentratedLiquidityConfig;
+    addLiquidityConfig: AddConcentratedLiquidityState;
     highSpotPriceInputRef: React.MutableRefObject<HTMLInputElement | null>;
   } & CustomClasses
 > = observer((props) => {
@@ -835,7 +824,7 @@ const PresetStrategyCard: FunctionComponent<
   {
     type: null | "passive" | "moderate" | "aggressive";
     src: string;
-    addLiquidityConfig: ObservableAddConcentratedLiquidityConfig;
+    addLiquidityConfig: AddConcentratedLiquidityState;
     label: string;
     width?: number;
     height?: number;
@@ -878,8 +867,8 @@ const PresetStrategyCard: FunctionComponent<
       (min: Dec, max: Dec) => {
         // moderate and aggressive needs to account for currency decimals
         const multiplicationQuoteOverBase = DecUtils.getTenExponentN(
-          (baseDepositAmountIn.sendCurrency.coinDecimals ?? 0) -
-            (quoteDepositAmountIn.sendCurrency.coinDecimals ?? 0)
+          (baseDepositAmountIn.amount?.currency.coinDecimals ?? 0) -
+            (quoteDepositAmountIn.amount?.currency.coinDecimals ?? 0)
         );
 
         setMinRange(min.mul(multiplicationQuoteOverBase).toString());
@@ -970,7 +959,7 @@ const PresetStrategyCard: FunctionComponent<
 const PriceInputBox: FunctionComponent<{
   label: string;
   forPriceIndex: 0 | 1;
-  addConcLiquidityConfig: ObservableAddConcentratedLiquidityConfig;
+  addConcLiquidityConfig: AddConcentratedLiquidityState;
   inputRef?: React.MutableRefObject<HTMLInputElement | null>;
 }> = observer(({ label, forPriceIndex, addConcLiquidityConfig, inputRef }) => {
   const [isFocused, setIsFocused] = useState(false);

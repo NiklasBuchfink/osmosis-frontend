@@ -1,4 +1,3 @@
-import { ConcentratedLiquidityPool } from "@osmosis-labs/pools";
 import { ObservableAddLiquidityConfig } from "@osmosis-labs/stores";
 import { observer } from "mobx-react-lite";
 import { useState } from "react";
@@ -15,6 +14,7 @@ import {
 } from "~/hooks";
 import { ModalBase, ModalBaseProps } from "~/modals/base";
 import { useStore } from "~/stores";
+import { api } from "~/utils/trpc";
 
 import { SuperfluidValidatorModal } from "./superfluid-validator";
 
@@ -35,8 +35,6 @@ export const AddLiquidityModal: FunctionComponent<
   const account = accountStore.getWallet(chainId);
   const isSendingMsg = account?.txTypeInProgress !== "";
 
-  const osmosisQueries = queriesStore.get(chainStore.osmosis.chainId).osmosis!;
-
   const { config: addLiquidityConfig, addLiquidity } = useAddLiquidityConfig(
     chainStore,
     chainId,
@@ -48,34 +46,37 @@ export const AddLiquidityModal: FunctionComponent<
     useState(false);
 
   const { config: addConliqConfig, addLiquidity: addConLiquidity } =
-    useAddConcentratedLiquidityConfig(chainStore, chainId, poolId);
+    useAddConcentratedLiquidityConfig(chainId, poolId);
 
   // initialize pool data stores once root pool store is loaded
-  const queryPool = osmosisQueries.queryPools.getPool(poolId);
-  const clPool =
-    queryPool?.pool && queryPool.pool instanceof ConcentratedLiquidityPool
-      ? queryPool.pool
-      : undefined;
-  const config = clPool ? addConliqConfig : addLiquidityConfig;
+  const { data: queryPool, isLoading: isLoadingPool } =
+    api.edge.pools.getPool.useQuery({ poolId });
+  const isConcentratedLiquidityPool = queryPool?.type === "concentrated";
+  const config = isConcentratedLiquidityPool
+    ? addConliqConfig
+    : addLiquidityConfig;
 
   const { showModalBase, accountActionButton } = useConnectWalletModalRedirect(
     {
       disabled: config.error !== undefined || isSendingMsg,
       onClick: () => {
         // New CL position: move to next step if superfluid validator selection is needed
-        if (Boolean(clPool) && addConliqConfig.shouldBeSuperfluidStaked) {
+        if (
+          isConcentratedLiquidityPool &&
+          addConliqConfig.shouldBeSuperfluidStaked
+        ) {
           setShowSuperfluidValidatorModal(true);
           return;
         }
 
-        const addLiquidityPromise = Boolean(clPool)
+        const addLiquidityPromise = isConcentratedLiquidityPool
           ? addConLiquidity()
           : addLiquidity();
         const addLiquidityResult = addLiquidityPromise.then(() =>
           props.onRequestClose()
         );
 
-        if (!Boolean(clPool)) {
+        if (!isConcentratedLiquidityPool) {
           props.onAddLiquidity?.(
             addLiquidityResult,
             config as ObservableAddLiquidityConfig
@@ -84,15 +85,23 @@ export const AddLiquidityModal: FunctionComponent<
       },
       children: config.error
         ? t(...tError(config.error))
-        : Boolean(clPool) && addConliqConfig.shouldBeSuperfluidStaked
+        : isConcentratedLiquidityPool &&
+          addConliqConfig.shouldBeSuperfluidStaked
         ? t("addConcentratedLiquidity.buttonCreateAndStake")
         : t("addLiquidity.title"),
     },
     props.onRequestClose
   );
 
+  const getFiatValue = useCallback(
+    (coin) => priceStore.calculatePrice(coin),
+    [priceStore]
+  );
+
+  if (isLoadingPool) return null;
+
   // add concentrated liquidity
-  if (Boolean(clPool)) {
+  if (isConcentratedLiquidityPool) {
     return (
       <>
         {showSuperfluidValidatorModal &&
@@ -115,12 +124,9 @@ export const AddLiquidityModal: FunctionComponent<
           className="max-h-[98vh] !max-w-[57.5rem] overflow-auto"
         >
           <AddConcLiquidity
+            poolId={poolId}
             addLiquidityConfig={addConliqConfig}
             actionButton={accountActionButton}
-            getFiatValue={useCallback(
-              (coin) => priceStore.calculatePrice(coin),
-              [priceStore]
-            )}
             onRequestClose={props.onRequestClose}
           />
         </ModalBase>
@@ -139,7 +145,7 @@ export const AddLiquidityModal: FunctionComponent<
         className="pt-4"
         addLiquidityConfig={config as ObservableAddLiquidityConfig}
         actionButton={accountActionButton}
-        getFiatValue={(coin) => priceStore.calculatePrice(coin)}
+        getFiatValue={getFiatValue}
       />
     </ModalBase>
   );

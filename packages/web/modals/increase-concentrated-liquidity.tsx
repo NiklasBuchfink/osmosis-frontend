@@ -1,8 +1,5 @@
 import { Dec } from "@keplr-wallet/unit";
-import {
-  ObservableAddConcentratedLiquidityConfig,
-  ObservableQueryLiquidityPositionById,
-} from "@osmosis-labs/stores";
+import { ObservableQueryLiquidityPositionById } from "@osmosis-labs/stores";
 import { observer } from "mobx-react-lite";
 import dynamic from "next/dynamic";
 import Image from "next/image";
@@ -13,7 +10,7 @@ import { MyPositionStatus } from "~/components/cards/my-position/status";
 import { PriceChartHeader } from "~/components/chart/token-pair-historical";
 import { DepositAmountGroup } from "~/components/cl-deposit-input-group";
 import { tError } from "~/components/localization";
-import { useTranslation } from "~/hooks";
+import { AddConcentratedLiquidityState, useTranslation } from "~/hooks";
 import {
   useAddConcentratedLiquidityConfig,
   useConnectWalletModalRedirect,
@@ -40,7 +37,7 @@ export const IncreaseConcentratedLiquidityModal: FunctionComponent<
   } & ModalBaseProps
 > = observer((props) => {
   const { poolId, position: positionConfig } = props;
-  const { chainStore, accountStore, priceStore, queriesStore } = useStore();
+  const { chainStore, accountStore, queriesStore } = useStore();
   const { t } = useTranslation();
 
   const { chainId } = chainStore.osmosis;
@@ -65,7 +62,6 @@ export const IncreaseConcentratedLiquidityModal: FunctionComponent<
     positionConfig;
 
   const { config, increaseLiquidity } = useAddConcentratedLiquidityConfig(
-    chainStore,
     chainId,
     poolId
   );
@@ -84,11 +80,6 @@ export const IncreaseConcentratedLiquidityModal: FunctionComponent<
         : t("clPositions.addMoreLiquidity"),
     },
     props.onRequestClose
-  );
-
-  const getFiatValue = useCallback(
-    (coin) => priceStore.calculatePrice(coin),
-    [priceStore]
   );
 
   useEffect(() => {
@@ -157,8 +148,8 @@ export const IncreaseConcentratedLiquidityModal: FunctionComponent<
             </div>
             <div className="text-subtitle1 font-subtitle1 text-osmoverse-300 xs:text-body2">
               {t("addConcentratedLiquidity.basePerQuote", {
-                base: config.baseDepositAmountIn.sendCurrency.coinDenom,
-                quote: config.quoteDepositAmountIn.sendCurrency.coinDenom,
+                base: config.baseDepositAmountIn.amount?.denom ?? "",
+                quote: config.quoteDepositAmountIn.amount?.denom ?? "",
               })}
             </div>
           </div>
@@ -257,7 +248,6 @@ export const IncreaseConcentratedLiquidityModal: FunctionComponent<
             className="mt-4 bg-transparent !p-0"
             outOfRangeClassName="!bg-osmoverse-900"
             priceInputClass="!bg-osmoverse-900 !w-full"
-            getFiatValue={getFiatValue}
             currency={queryPool?.poolAssets[0]?.amount?.currency}
             onUpdate={useCallback(
               (amount) => {
@@ -267,7 +257,7 @@ export const IncreaseConcentratedLiquidityModal: FunctionComponent<
               [config]
             )}
             onMax={config.setBaseDepositAmountMax}
-            currentValue={config.baseDepositAmountIn.amount}
+            currentValue={config.baseDepositAmountIn.inputAmount}
             outOfRange={config.quoteDepositOnly}
             percentage={config.depositPercentages[0]}
           />
@@ -275,7 +265,6 @@ export const IncreaseConcentratedLiquidityModal: FunctionComponent<
             className=" bg-transparent !px-0"
             priceInputClass="!bg-osmoverse-900 !w-full"
             outOfRangeClassName="!bg-osmoverse-900"
-            getFiatValue={getFiatValue}
             currency={queryPool?.poolAssets[1]?.amount?.currency}
             onUpdate={useCallback(
               (amount) => {
@@ -285,7 +274,7 @@ export const IncreaseConcentratedLiquidityModal: FunctionComponent<
               [config]
             )}
             onMax={config.setQuoteDepositAmountMax}
-            currentValue={config.quoteDepositAmountIn.amount}
+            currentValue={config.quoteDepositAmountIn.inputAmount}
             outOfRange={config.baseDepositOnly}
             percentage={config.depositPercentages[1]}
           />
@@ -326,7 +315,7 @@ const PriceBox: FunctionComponent<{
  * Create a nested component to prevent unnecessary re-renders whenever the hover price changes.
  */
 const ChartHeader: FunctionComponent<{
-  addLiquidityConfig: ObservableAddConcentratedLiquidityConfig;
+  addLiquidityConfig: AddConcentratedLiquidityState;
   chartConfig: ObservableHistoricalAndLiquidityData;
 }> = observer(({ chartConfig, addLiquidityConfig }) => {
   const { historicalRange, priceDecimal, setHistoricalRange, hoverPrice } =
@@ -341,8 +330,8 @@ const ChartHeader: FunctionComponent<{
       }}
       historicalRange={historicalRange}
       setHistoricalRange={setHistoricalRange}
-      baseDenom={baseDepositAmountIn.sendCurrency.coinDenom}
-      quoteDenom={quoteDepositAmountIn.sendCurrency.coinDenom}
+      baseDenom={baseDepositAmountIn.amount?.denom}
+      quoteDenom={quoteDepositAmountIn.amount?.denom}
       hoverPrice={hoverPrice}
       decimal={priceDecimal}
       hideButtons
